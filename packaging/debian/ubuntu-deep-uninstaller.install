@@ -1,0 +1,3 @@
+debian/tmp/usr/bin/ubuntu-deep-uninstaller usr/bin
+debian/tmp/usr/bin/ubuntu-deep-uninstaller-gui usr/bin
+debian/tmp/usr/share/applications/org.uduninstaller.UbuntuDeepUninstaller.desktop usr/share/applications

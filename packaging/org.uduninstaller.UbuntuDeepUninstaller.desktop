@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Ubuntu Deep Uninstaller
+Comment=Detect how an application was installed and remove it completely
+Exec=ubuntu-deep-uninstaller-gui
+Icon=org.uduninstaller.UbuntuDeepUninstaller
+Terminal=false
+Categories=System;Settings;
+StartupNotify=true

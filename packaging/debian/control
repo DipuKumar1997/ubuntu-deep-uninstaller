@@ -1,0 +1,25 @@
+Source: ubuntu-deep-uninstaller
+Section: admin
+Priority: optional
+Maintainer: You <you@example.com>
+Build-Depends: debhelper-compat (= 13), cmake, g++ (>= 4:13), pkg-config,
+ libgtk-4-dev (>= 4.14), libadwaita-1-dev (>= 1.5)
+Standards-Version: 4.6.2
+Homepage: https://example.com/ubuntu-deep-uninstaller
+
+Package: ubuntu-deep-uninstaller
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends},
+ dpkg, apt, libgtk-4-1, libadwaita-1-0,
+ policykit-1 | sudo
+Recommends: flatpak, snapd, wine, ptyxis | gnome-terminal
+Description: Deep, evidence-based application uninstaller for GNOME
+ Detects whether an installed application came from APT, Flatpak, Snap,
+ Wine, an AppImage, or a manual installation, and performs a careful,
+ confirmed, best-effort removal of the application and its associated
+ configuration, cache, and data. Integrates an "Uninstall Completely"
+ action into the GNOME application grid's right-click menu.
+ .
+ Every destructive operation runs in a visible terminal with sudo
+ requested interactively when needed; nothing is deleted without an
+ explicit, itemized removal plan and confirmation.

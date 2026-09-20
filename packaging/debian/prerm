@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+echo "Note: 'ubuntu-deep-uninstaller' is being removed, but any"
+echo "'Uninstall Completely' overrides it wrote to"
+echo "~/.local/share/applications/ are left in place (they are inert"
+echo "without the binary present). You can remove them manually with:"
+echo "  grep -rl UduUninstall ~/.local/share/applications | xargs rm -f"
+exit 0

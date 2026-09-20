@@ -1,0 +1,27 @@
+#!/bin/sh
+set -e
+# Register the "Uninstall Completely" context-menu action for every
+# application already on the system. This is idempotent and safe to
+# re-run (see integration::sync_all): it only ever writes user-local
+# overrides under each real user's ~/.local/share/applications, never
+# touches package-owned files, and skips anything that already carries
+# the action.
+#
+# We cannot know which desktop user(s) will actually use this tool from a
+# root postinst context (there is no logged-in GUI user during package
+# install), so we deliberately do NOT try to run the per-user sync here.
+# Instead:
+if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+    :  # Placeholder for a future systemd --user path unit that runs
+       # `ubuntu-deep-uninstaller --sync-integration` on login for each
+       # user; not enabled by default in this initial package so we never
+       # write into a user's home directory without their own action.
+fi
+
+echo "ubuntu-deep-uninstaller installed."
+echo "Run 'ubuntu-deep-uninstaller --sync-integration' as your normal user"
+echo "(no sudo) to add the 'Uninstall Completely' action to every"
+echo "application in your GNOME app grid, or open the GUI and use its"
+echo "'Refresh integration' action."
+
+exit 0
