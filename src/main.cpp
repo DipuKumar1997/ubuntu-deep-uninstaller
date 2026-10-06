@@ -9,9 +9,11 @@
 #include <vector>
 #include <optional>
 #include <filesystem>
+#include <unordered_set>
 
 #include "desktop_entry.hpp"
 #include "detector/detection_engine.hpp"
+#include "detector/common.hpp"
 #include "planner/removal_plan.hpp"
 #include "planner/plan_cache.hpp"
 #include "terminal/report.hpp"
@@ -284,17 +286,33 @@ int main(int argc, char** argv) {
     }
 
     if (cmd == "--list-applications") {
-        // Minimal implementation for Phase 2: list application .desktop
-        // files under the standard system directory. A full merge across
-        // system + user + snap/flatpak export directories, with dedup by
-        // desktop-file-ID, is a mechanical extension of this loop.
+        // Same XDG precedence + dedup as the GUI's scan_applications()
+        // (see gui/gui_main.cpp for the full reasoning): user-local
+        // desktop files -- where JetBrains Toolbox, manually registered
+        // apps, and this tool's own context-menu overrides all live --
+        // are scanned first and win on a desktop-id collision, then the
+        // two system directories, then Flatpak/Snap export directories.
         namespace fs = std::filesystem;
         std::error_code ec;
-        for (const auto& f : fs::directory_iterator("/usr/share/applications", ec)) {
-            if (f.path().extension() != ".desktop") continue;
-            auto entry = udu::parse_desktop_file(f.path().string());
-            if (!entry || entry->no_display) continue;
-            std::cout << entry->desktop_id << "\t" << entry->name << "\n";
+        std::string home = udu::detector::common::home_dir();
+        std::vector<std::string> dirs = {
+            home + "/.local/share/applications",
+            "/usr/local/share/applications",
+            "/usr/share/applications",
+            home + "/.local/share/flatpak/exports/share/applications",
+            "/var/lib/flatpak/exports/share/applications",
+            "/var/lib/snapd/desktop/applications",
+        };
+        std::unordered_set<std::string> seen_ids;
+        for (const auto& dir : dirs) {
+            if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) continue;
+            for (const auto& f : fs::directory_iterator(dir, ec)) {
+                if (f.path().extension() != ".desktop") continue;
+                auto entry = udu::parse_desktop_file(f.path().string());
+                if (!entry || entry->no_display) continue;
+                if (!seen_ids.insert(entry->desktop_id).second) continue;
+                std::cout << entry->desktop_id << "\t" << entry->name << "\t" << f.path().string() << "\n";
+            }
         }
         return 0;
     }

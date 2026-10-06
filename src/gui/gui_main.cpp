@@ -48,9 +48,11 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <unordered_set>
 
 #include "../src/desktop_entry.hpp"
 #include "../src/detector/detection_engine.hpp"
+#include "../src/detector/common.hpp"
 #include "../src/planner/removal_plan.hpp"
 #include "../src/planner/plan_cache.hpp"
 #include "../src/terminal/report.hpp"
@@ -216,13 +218,42 @@ void on_history_clicked(GtkButton*, gpointer user_data) {
 std::vector<AppEntry> scan_applications() {
     std::vector<AppEntry> apps;
     std::error_code ec;
-    for (const auto& dir : {std::string("/usr/share/applications"),
-                             std::string("/usr/local/share/applications")}) {
+    std::string home = udu::detector::common::home_dir();
+
+    // XDG precedence order, highest first: a user-local desktop file with
+    // the same desktop-file-ID as a system one is what actually launches
+    // (this is also exactly the mechanism this tool's own
+    // "Uninstall Completely" integration relies on -- see
+    // integration/desktop_override.cpp). Scanning in this order and
+    // skipping any desktop_id already seen means:
+    //   1. This previously missed EVERY app whose only .desktop file
+    //      lives under ~/.local/share/applications/ -- which is where
+    //      JetBrains Toolbox, most manually-registered apps, and anything
+    //      a person set up by hand with a symlink into /usr/local/bin
+    //      (e.g. CLion, IDEA, Arduino IDE) actually put theirs. That
+    //      directory is now scanned first.
+    //   2. Flatpak and Snap apps exported outside the two directories
+    //      this used to check are now included too.
+    //   3. An override THIS tool wrote to ~/.local/share/applications/
+    //      for a system app is correctly treated as the same app (by
+    //      desktop_id), not a confusing duplicate entry.
+    std::vector<std::string> dirs_in_precedence_order = {
+        home + "/.local/share/applications",
+        "/usr/local/share/applications",
+        "/usr/share/applications",
+        home + "/.local/share/flatpak/exports/share/applications",
+        "/var/lib/flatpak/exports/share/applications",
+        "/var/lib/snapd/desktop/applications",
+    };
+
+    std::unordered_set<std::string> seen_ids;
+    for (const auto& dir : dirs_in_precedence_order) {
         if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) continue;
         for (const auto& f : fs::directory_iterator(dir, ec)) {
             if (f.path().extension() != ".desktop") continue;
             auto entry = udu::parse_desktop_file(f.path().string());
             if (!entry || entry->no_display || entry->type != "Application") continue;
+            if (!seen_ids.insert(entry->desktop_id).second) continue;  // lower-precedence duplicate
             apps.push_back({entry->desktop_id, entry->name.empty() ? entry->desktop_id : entry->name,
                              f.path().string()});
         }

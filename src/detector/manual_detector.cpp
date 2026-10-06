@@ -1,5 +1,6 @@
 #include "manual_detector.hpp"
 #include "common.hpp"
+#include "portable_app_finding.hpp"
 #include "../security/paths.hpp"
 #include "../security/debug_log.hpp"
 
@@ -83,6 +84,48 @@ std::optional<DetectionResult> detect_manual(const DesktopEntry& entry) {
             "The executable lives directly inside a shared system directory (" + parent + "). "
             "Only the single binary file is proposed for removal; the containing directory will "
             "NOT be touched because other unrelated files live there too.");
+    }
+
+    // Portable-app enhancement: many manually extracted apps (JetBrains
+    // IDEs, Arduino IDE, etc.) launch via a wrapper inside a `bin/`
+    // subdirectory of a much larger extracted archive. The
+    // immediate-parent candidate above only offers that `bin/` folder;
+    // this also offers the actual extracted root, plus a possible
+    // matching installer archive in ~/Downloads -- both cached (see
+    // portable_app_finding.cpp) so this only ever computes once per app,
+    // keeping every later detection run for the same app fast.
+    auto cached_finding = load_cached_portable_finding(*resolved);
+    PortableAppFinding finding = cached_finding ? *cached_finding
+                                                 : compute_and_cache_portable_finding(*resolved);
+
+    if (finding.extracted_root) {
+        Resource root_resource;
+        root_resource.path = *finding.extracted_root;
+        root_resource.type = ResourceType::Data;
+        root_resource.confidence = Confidence::Medium;
+        root_resource.evidence = "the executable's immediate parent directory is named 'bin' -- a "
+                                 "near-universal convention for a manually extracted application "
+                                 "archive -- so this directory (one level up) looks like the actual "
+                                 "extracted application root, not just its bin/ folder";
+        root_resource.user_owned = finding.extracted_root->rfind(udu::detector::common::home_dir(), 0) == 0;
+        root_resource.recommended_action = PlannedAction::WarnBeforeRemove;
+        root_resource.allowed_roots = {*finding.extracted_root};
+        result.resources.push_back(root_resource);
+    }
+
+    if (finding.matching_download_archive) {
+        Resource archive_resource;
+        archive_resource.path = *finding.matching_download_archive;
+        archive_resource.type = ResourceType::Other;
+        archive_resource.confidence = Confidence::Low;
+        archive_resource.evidence = "a file in ~/Downloads whose name loosely matches this "
+                                    "application -- likely the installer archive it was originally "
+                                    "extracted from; this is a weak, name-based match and is never "
+                                    "auto-selected";
+        archive_resource.user_owned = true;
+        archive_resource.recommended_action = PlannedAction::WarnBeforeRemove;
+        archive_resource.allowed_roots = {*finding.matching_download_archive};
+        result.resources.push_back(archive_resource);
     }
 
     // Existence-checked XDG guesses keyed off the executable's own leaf name.

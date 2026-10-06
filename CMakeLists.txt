@@ -33,6 +33,7 @@ add_library(udu_core STATIC
     src/detector/wine_detector.cpp
     src/detector/appimage_detector.cpp
     src/detector/manual_detector.cpp
+    src/detector/portable_app_finding.cpp
     src/detector/detection_engine.cpp
     src/planner/removal_plan.cpp
     src/planner/plan_cache.cpp

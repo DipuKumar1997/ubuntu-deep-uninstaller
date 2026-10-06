@@ -588,6 +588,82 @@ will do the same for anything found later.
 pass, the crash reproduced and fixed as described above, new logging
 confirmed rendering correctly per-detector and per-thread.
 
+## Round 9: missing apps (CLion/IDEA/Arduino) and portable-app (JetBrains-style) cleanup
+
+The project owner reported several applications pinned to the dock
+(Arduino, CLion, IntelliJ IDEA) never showing up in the GUI's list or
+`--list-applications` at all.
+
+**Root cause, confirmed by reading the code**: `scan_applications()` (GUI)
+and `--list-applications` (CLI) only ever scanned
+`/usr/share/applications` and `/usr/local/share/applications` --
+`~/.local/share/applications` was never scanned. That is exactly where
+JetBrains Toolbox, most manually-registered apps, and anything set up by
+hand (the owner's own example: `sudo ln -sf <extracted>/bin/idea
+/usr/local/bin/idea` plus a hand-written `.desktop` file) actually
+register themselves. Fixed in both places: now scans, in correct XDG
+precedence order (user-local first, then the two system directories,
+then Flatpak and Snap export directories), with dedup by desktop-file-ID
+so an override this tool itself writes to `~/.local/share/applications/`
+for a system app is correctly treated as the same app rather than a
+confusing duplicate entry.
+
+**Portable-app ("extract a .tar.gz, symlink the binary into
+/usr/local/bin") cleanup, with caching.** New module
+`src/detector/portable_app_finding.{hpp,cpp}`, wired into
+`manual_detector.cpp`:
+1. If the resolved executable's immediate parent directory is named
+   `bin` (the near-universal convention for this kind of archive --
+   JetBrains IDEs all do this), the actual grandparent directory is now
+   also offered as a removal candidate, not just the `bin/` folder the
+   existing immediate-parent logic already found. Both are `[REMOVE*]`
+   (separately confirmed, never auto-selected).
+2. A shallow (one level, never recursive), `~/Downloads`-only search for
+   an archive file whose name plausibly matches the application, offered
+   the same way, addressing "ask if the zip file should be removed too."
+3. Both results are cached to disk (`~/.cache/ubuntu-deep-uninstaller/
+   portable_app_findings.cache`), keyed by the resolved executable path,
+   so a given application is only ever searched once -- explicitly
+   requested ("don't run find again next time"), and keeps the
+   already-fast detection path from Round 6 from regressing.
+
+**Verified end-to-end** with a realistic fixture reproducing the exact
+scenario described (an extracted `idea-IU-262.9437.185/bin/idea.sh`,
+symlinked, with a matching `ideaIU-2024.1.4.tar.gz` sitting in
+Downloads): the plan correctly offered all four resources (the binary
+itself, the `bin/` folder, the actual extracted root one level up, and
+the matching archive) -- and a second run against the same app showed no
+re-scan at all in the `UDU_DEBUG=1` trace (cache hit confirmed both by
+the absent log lines and by reading the cache file's contents directly).
+One real bug caught and fixed during this verification: the initial
+Downloads-matching logic did a direct substring comparison between a
+hyphenated token (`idea-iu`, derived from the directory name) and the
+actual filename (`ideaIU-...`, no hyphen) and missed the match entirely;
+fixed by normalizing both sides to letters-and-digits-only before
+comparing, then re-verified the match succeeds.
+
+**Not implemented, addressed by explanation**: pushing this project's
+history to a GitHub repository. This chat environment has no network
+access and no GitHub credentials/connector available to it, so an actual
+`git push` to a remote isn't something Claude can do from here --
+explained directly to the owner, with the honest option of initializing
+a local repo from the delivered zip themselves, or revisiting this if a
+GitHub connector becomes available in a future session.
+
+**A mid-session environment reset happened during this round**: the
+sandbox's working directory was wiped partway through (lost the
+in-progress `scan_applications()` fix and the not-yet-committed
+`portable_app_finding` files), but the previously delivered zip in
+`/mnt/user-data/outputs/` survived and was used to restore the full
+project before redoing the lost work. Worth noting for future rounds:
+the outputs directory is more durable than the sandbox's own filesystem
+across a reset.
+
+**Verified this round**: full core+CLI rebuild clean, all 12 tests still
+pass, portable-app detection and caching verified end-to-end as described
+above. GUI-side `scan_applications()` fix bracket-balance checked only
+(same standing limitation -- no GTK4 headers in this sandbox).
+
 ## What was NOT run, and why
 
 - **Actual destructive execution** (`--uninstall` past the confirmation
